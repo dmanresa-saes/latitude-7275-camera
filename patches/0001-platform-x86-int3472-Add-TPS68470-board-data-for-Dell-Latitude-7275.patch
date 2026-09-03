@@ -1,4 +1,4 @@
-From: Dario Manresa <d.manresa@electronica-submarina.com>
+From: D. Manresa <d.manresa@electronica-submarina.com>
 Subject: [PATCH] platform/x86: int3472: Add TPS68470 board data for Dell Latitude 7275
 
 The Dell Latitude 7275 2-in-1 has the same camera design as the Latitude
@@ -19,18 +19,14 @@ Note: on this machine the sensor sits on the I2C4 controller (INT3446),
 whose MMIO region overlaps an ACPI OperationRegion (\_SB.PCI0.GEXP.BAR0),
 so the intel-lpss driver only binds with acpi_enforce_resources=lax.
 
-Signed-off-by: Dario Manresa <d.manresa@electronica-submarina.com>
+Signed-off-by: D. Manresa <d.manresa@electronica-submarina.com>
 ---
 --- a/drivers/platform/x86/intel/int3472/tps68470_board_data.c
 +++ b/drivers/platform/x86/intel/int3472/tps68470_board_data.c
-@@ -287,6 +287,19 @@
+@@ -449,6 +449,15 @@
  	},
  };
  
-+/*
-+ * Dell Latitude 7275: same TI TPS68470 + OV5670 (INT3479) camera design as
-+ * the Latitude 7212, but the PMIC ACPI node enumerates as INT3472:04.
-+ */
 +static const struct int3472_tps68470_board_data dell_7275_tps68470_board_data = {
 +	.dev_name = "i2c-INT3472:04",
 +	.tps68470_regulator_pdata = &dell_7212_tps68470_pdata,
@@ -40,20 +36,20 @@ Signed-off-by: Dario Manresa <d.manresa@electronica-submarina.com>
 +	},
 +};
 +
- static const struct dmi_system_id int3472_tps68470_board_data_table[] = {
+ static const struct int3472_tps68470_board_data msi_prestige_ai_evo_tps68470_board_data = {
+ 	.dev_name = "i2c-INT3472:06",
+ 	.tps68470_regulator_pdata = &msi_prestige_ai_evo_tps68470_pdata,
+@@ -500,6 +509,13 @@
+ 	},
  	{
  		.matches = {
-@@ -316,6 +329,13 @@
- 		},
- 		.driver_data = (void *)&dell_7212_tps68470_board_data,
- 	},
-+	{
-+		.matches = {
 +			DMI_EXACT_MATCH(DMI_SYS_VENDOR, "Dell Inc."),
 +			DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "Latitude 7275"),
 +		},
 +		.driver_data = (void *)&dell_7275_tps68470_board_data,
 +	},
- 	{ }
- };
- 
++	{
++		.matches = {
+ 			DMI_EXACT_MATCH(DMI_SYS_VENDOR, "Micro-Star International Co., Ltd."),
+ 			DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "Prestige 13 AI+ Evo A2VMG"),
+ 			DMI_EXACT_MATCH(DMI_BOARD_NAME, "MS-13Q3"),
