@@ -1,5 +1,5 @@
 From c39d22c090e29a6668095d97c35d215484dd71ca Mon Sep 17 00:00:00 2001
-From: "D. Manresa" <d.manresa@electronica-submarina.com>
+From: "D. Manresa" <dmanresa@gmail.com>
 Date: Thu, 3 Sep 2026 12:45:00 +0200
 Subject: [PATCH 3/3] ipa: ipu3: tone_mapping: Make the gamma configurable
 
@@ -13,7 +13,7 @@ LUT contents are ignored and a fixed curve is applied whenever the gamma
 block is programmed (gammas of 0.5, 1.1 and 3.0 produce identical output),
 while leaving the block unprogrammed results in a linear ramp.
 
-Signed-off-by: D. Manresa <d.manresa@electronica-submarina.com>
+Signed-off-by: D. Manresa <dmanresa@gmail.com>
 ---
  src/ipa/ipu3/algorithms/tone_mapping.cpp | 37 +++++++++++++++++++++++-
  src/ipa/ipu3/algorithms/tone_mapping.h   |  3 ++

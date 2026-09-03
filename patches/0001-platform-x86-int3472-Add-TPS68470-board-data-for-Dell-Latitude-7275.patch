@@ -1,4 +1,4 @@
-From: D. Manresa <d.manresa@electronica-submarina.com>
+From: D. Manresa <dmanresa@gmail.com>
 Subject: [PATCH] platform/x86: int3472: Add TPS68470 board data for Dell Latitude 7275
 
 The Dell Latitude 7275 2-in-1 has the same camera design as the Latitude
@@ -19,7 +19,7 @@ Note: on this machine the sensor sits on the I2C4 controller (INT3446),
 whose MMIO region overlaps an ACPI OperationRegion (\_SB.PCI0.GEXP.BAR0),
 so the intel-lpss driver only binds with acpi_enforce_resources=lax.
 
-Signed-off-by: D. Manresa <d.manresa@electronica-submarina.com>
+Signed-off-by: D. Manresa <dmanresa@gmail.com>
 ---
 --- a/drivers/platform/x86/intel/int3472/tps68470_board_data.c
 +++ b/drivers/platform/x86/intel/int3472/tps68470_board_data.c

@@ -1,5 +1,5 @@
 From 823725964a52af2198e4dc9f1e6e5df38bb30488 Mon Sep 17 00:00:00 2001
-From: "D. Manresa" <d.manresa@electronica-submarina.com>
+From: "D. Manresa" <dmanresa@gmail.com>
 Date: Thu, 3 Sep 2026 12:45:00 +0200
 Subject: [PATCH 2/3] ipa: ipu3: blc: Make the black level configurable
 
@@ -15,7 +15,7 @@ zones clip to zero.
 Add an optional 'blackLevel' tuning parameter, keeping 64 as the default
 so that existing tuning files behave as before.
 
-Signed-off-by: D. Manresa <d.manresa@electronica-submarina.com>
+Signed-off-by: D. Manresa <dmanresa@gmail.com>
 ---
  src/ipa/ipu3/algorithms/blc.cpp | 42 +++++++++++++++++++++++++++++----
  src/ipa/ipu3/algorithms/blc.h   |  5 ++++
