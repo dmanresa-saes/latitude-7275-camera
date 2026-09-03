@@ -1,0 +1,114 @@
+From 823725964a52af2198e4dc9f1e6e5df38bb30488 Mon Sep 17 00:00:00 2001
+From: "D. Manresa" <d.manresa@electronica-submarina.com>
+Date: Thu, 3 Sep 2026 12:45:00 +0200
+Subject: [PATCH 2/3] ipa: ipu3: blc: Make the black level configurable
+
+The black level correction algorithm hard-codes an optical black level of
+64 for the four Bayer channels. Measurements on a Dell Latitude 7275
+(OV5670, 10-bit black level 64) show that the ImgU obgrid unit is half a
+10-bit LSB: with 64 the AWB statistics and the image keep a residual
+pedestal of about 9/255 (colour ratios of dark neutral zones drift towards
+1.0, and a dark frame reads 7-8), which the colour gains then amplify into
+a blue or cyan cast. With 128 the pedestal is gone, and with 192 dark
+zones clip to zero.
+
+Add an optional 'blackLevel' tuning parameter, keeping 64 as the default
+so that existing tuning files behave as before.
+
+Signed-off-by: D. Manresa <d.manresa@electronica-submarina.com>
+---
+ src/ipa/ipu3/algorithms/blc.cpp | 42 +++++++++++++++++++++++++++++----
+ src/ipa/ipu3/algorithms/blc.h   |  5 ++++
+ 2 files changed, 43 insertions(+), 4 deletions(-)
+
+diff --git a/src/ipa/ipu3/algorithms/blc.cpp b/src/ipa/ipu3/algorithms/blc.cpp
+index 35748fb..7d04702 100644
+--- a/src/ipa/ipu3/algorithms/blc.cpp
++++ b/src/ipa/ipu3/algorithms/blc.cpp
+@@ -7,6 +7,10 @@
+ 
+ #include "blc.h"
+ 
++#include <libcamera/base/log.h>
++
++#include "libcamera/internal/value_node.h"
++
+ /**
+  * \file blc.h
+  * \brief IPU3 Black Level Correction control
+@@ -30,8 +34,38 @@ namespace ipa::ipu3::algorithms {
+  * isn't currently supported.
+  */
+ 
++LOG_DEFINE_CATEGORY(IPU3Blc)
++
++/*
++ * Default optical black level. This matches the OV5670 sensor black level
++ * when interpreted as the ImgU obgrid unit (see init()).
++ */
++static constexpr int16_t kDefaultBlackLevel = 64;
++
+ BlackLevelCorrection::BlackLevelCorrection()
++	: blackLevel_(kDefaultBlackLevel)
++{
++}
++
++/**
++ * \copydoc libcamera::ipa::Algorithm::init
++ *
++ * The optional \a blackLevel tuning parameter sets the optical black level
++ * subtracted by the ImgU for the four Bayer channels. The ImgU obgrid unit
++ * has been measured to be half a 10-bit LSB: with a value of 64 an OV5670
++ * (black level 64 in 10-bit) keeps a residual pedestal of ~9/255 in the
++ * AWB statistics and in the image, which the colour gains then amplify;
++ * with 128 the pedestal disappears. The default is kept at 64 for
++ * compatibility with existing tuning files.
++ */
++int BlackLevelCorrection::init([[maybe_unused]] IPAContext &context,
++			       const ValueNode &tuningData)
+ {
++	blackLevel_ = tuningData["blackLevel"].get<int16_t>().value_or(kDefaultBlackLevel);
++
++	LOG(IPU3Blc, Debug) << "Black level " << blackLevel_;
++
++	return 0;
+ }
+ 
+ /**
+@@ -54,10 +88,10 @@ void BlackLevelCorrection::prepare([[maybe_unused]] IPAContext &context,
+ 	 * \todo The correction values should come from sensor specific
+ 	 * tuning processes. This is a first rough approximation.
+ 	 */
+-	params->obgrid_param.gr = 64;
+-	params->obgrid_param.r = 64;
+-	params->obgrid_param.b = 64;
+-	params->obgrid_param.gb = 64;
++	params->obgrid_param.gr = blackLevel_;
++	params->obgrid_param.r = blackLevel_;
++	params->obgrid_param.b = blackLevel_;
++	params->obgrid_param.gb = blackLevel_;
+ 
+ 	/* Enable the custom black level correction processing */
+ 	params->use.obgrid = 1;
+diff --git a/src/ipa/ipu3/algorithms/blc.h b/src/ipa/ipu3/algorithms/blc.h
+index 6274804..58cdd92 100644
+--- a/src/ipa/ipu3/algorithms/blc.h
++++ b/src/ipa/ipu3/algorithms/blc.h
+@@ -18,9 +18,14 @@ class BlackLevelCorrection : public Algorithm
+ public:
+ 	BlackLevelCorrection();
+ 
++	int init(IPAContext &context, const ValueNode &tuningData) override;
++
+ 	void prepare(IPAContext &context, const uint32_t frame,
+ 		     IPAFrameContext &frameContext,
+ 		     ipu3_uapi_params *params) override;
++
++private:
++	int16_t blackLevel_;
+ };
+ 
+ } /* namespace ipa::ipu3::algorithms */
+-- 
+2.55.0
+

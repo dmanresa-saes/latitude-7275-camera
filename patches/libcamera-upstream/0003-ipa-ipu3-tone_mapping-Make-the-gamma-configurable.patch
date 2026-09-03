@@ -1,0 +1,105 @@
+From c39d22c090e29a6668095d97c35d215484dd71ca Mon Sep 17 00:00:00 2001
+From: "D. Manresa" <d.manresa@electronica-submarina.com>
+Date: Thu, 3 Sep 2026 12:45:00 +0200
+Subject: [PATCH 3/3] ipa: ipu3: tone_mapping: Make the gamma configurable
+
+The tone mapping algorithm hard-codes a gamma of 1.1, which produces an
+almost linear output and dark mid-tones for a display-referred consumer.
+Add an optional 'gamma' tuning parameter, keeping 1.1 as the default.
+
+While at it, document an observation made on a Dell Latitude 7275 with
+the IPU3 firmware currently distributed for Linux: in the video pipe the
+LUT contents are ignored and a fixed curve is applied whenever the gamma
+block is programmed (gammas of 0.5, 1.1 and 3.0 produce identical output),
+while leaving the block unprogrammed results in a linear ramp.
+
+Signed-off-by: D. Manresa <d.manresa@electronica-submarina.com>
+---
+ src/ipa/ipu3/algorithms/tone_mapping.cpp | 37 +++++++++++++++++++++++-
+ src/ipa/ipu3/algorithms/tone_mapping.h   |  3 ++
+ 2 files changed, 39 insertions(+), 1 deletion(-)
+
+diff --git a/src/ipa/ipu3/algorithms/tone_mapping.cpp b/src/ipa/ipu3/algorithms/tone_mapping.cpp
+index 160338c..160b015 100644
+--- a/src/ipa/ipu3/algorithms/tone_mapping.cpp
++++ b/src/ipa/ipu3/algorithms/tone_mapping.cpp
+@@ -7,9 +7,14 @@
+ 
+ #include "tone_mapping.h"
+ 
++#include <algorithm>
+ #include <cmath>
+ #include <string.h>
+ 
++#include <libcamera/base/log.h>
++
++#include "libcamera/internal/value_node.h"
++
+ /**
+  * \file tone_mapping.h
+  */
+@@ -26,9 +31,39 @@ namespace ipa::ipu3::algorithms {
+  * generated based on a gamma parameter.
+  */
+ 
++LOG_DEFINE_CATEGORY(IPU3ToneMapping)
++
++/* Historical default, kept for existing tuning files. */
++static constexpr double kDefaultGamma = 1.1;
++
+ ToneMapping::ToneMapping()
+-	: gamma_(1.0)
++	: gamma_(1.0), tunedGamma_(kDefaultGamma)
++{
++}
++
++/**
++ * \copydoc libcamera::ipa::Algorithm::init
++ *
++ * The optional \a gamma tuning parameter sets the exponent of the encoding
++ * curve programmed in the ImgU gamma correction LUT, output = input^(1/gamma).
++ * The default is 1.1.
++ *
++ * Note that on the IPU3 firmware currently distributed for Linux
++ * (irci_irci_ecr-master_20161208_0213_20170112_1500) the video pipe applies
++ * a fixed curve when the gamma block is programmed and ignores the LUT
++ * contents: values of 0.5, 1.1 and 3.0 produce identical output, while not
++ * programming the block yields a linear ramp. The parameter is still useful
++ * to document the intent and for firmware that honours the LUT.
++ */
++int ToneMapping::init([[maybe_unused]] IPAContext &context,
++		      const ValueNode &tuningData)
+ {
++	tunedGamma_ = std::clamp(tuningData["gamma"].get<double>().value_or(kDefaultGamma),
++				 0.5, 4.0);
++
++	LOG(IPU3ToneMapping, Debug) << "Gamma " << tunedGamma_;
++
++	return 0;
+ }
+ 
+ /**
+diff --git a/src/ipa/ipu3/algorithms/tone_mapping.h b/src/ipa/ipu3/algorithms/tone_mapping.h
+index b2b3801..6c12867 100644
+--- a/src/ipa/ipu3/algorithms/tone_mapping.h
++++ b/src/ipa/ipu3/algorithms/tone_mapping.h
+@@ -18,6 +18,8 @@ class ToneMapping : public Algorithm
+ public:
+ 	ToneMapping();
+ 
++	int init(IPAContext &context, const ValueNode &tuningData) override;
++
+ 	int configure(IPAContext &context, const IPAConfigInfo &configInfo) override;
+ 	void prepare(IPAContext &context, const uint32_t frame,
+ 		     IPAFrameContext &frameContext, ipu3_uapi_params *params) override;
+@@ -28,6 +30,7 @@ public:
+ 
+ private:
+ 	double gamma_;
++	double tunedGamma_;
+ };
+ 
+ } /* namespace ipa::ipu3::algorithms */
+-- 
+2.55.0
+

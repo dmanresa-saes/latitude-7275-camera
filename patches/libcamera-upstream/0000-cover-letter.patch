@@ -1,0 +1,40 @@
+From c39d22c090e29a6668095d97c35d215484dd71ca Mon Sep 17 00:00:00 2001
+From: gentoo <gentoo@latitude7275.(none)>
+Date: Thu, 3 Sep 2026 12:52:20 +0200
+Subject: [PATCH 0/3] ipa: ipu3: black level, gamma and AGC fixes from a Dell Latitude 7275
+
+This series collects three small fixes for the IPU3 IPA found while
+bringing up the OV5670 front camera of a Dell Latitude 7275 (Skylake,
+IPU3 8086:1919):
+
+- The AGC luminance estimate receives the AWB gains as { red, blue,
+  green } while an RGB vector is expected.
+- The black level is hard-coded to 64. The ImgU obgrid unit turns out to
+  be half a 10-bit LSB, so with 64 an OV5670 keeps a ~9/255 pedestal in
+  the statistics and the image, which the colour gains amplify. Make it
+  a tuning parameter, keeping the default.
+- The tone mapping gamma is hard-coded to 1.1. Make it a tuning
+  parameter and document that the video pipe of the current firmware
+  ignores the LUT contents.
+
+All measurements were made with synthetic parameter tables and by reading
+the NV12 output statistics; details and tools are available at the
+project repository (see README). Follow-up series will add a Ccm
+algorithm ported from rkisp1, lens shading through the SHD block, and
+controls for the TCC chroma gain and IEFD sharpening.
+
+D. Manresa (3):
+  ipa: ipu3: agc: Fix swapped green and blue gains in luminance estimate
+  ipa: ipu3: blc: Make the black level configurable
+  ipa: ipu3: tone_mapping: Make the gamma configurable
+
+ src/ipa/ipu3/algorithms/agc.cpp          |  2 +-
+ src/ipa/ipu3/algorithms/blc.cpp          | 42 +++++++++++++++++++++---
+ src/ipa/ipu3/algorithms/blc.h            |  5 +++
+ src/ipa/ipu3/algorithms/tone_mapping.cpp | 37 ++++++++++++++++++++-
+ src/ipa/ipu3/algorithms/tone_mapping.h   |  3 ++
+ 5 files changed, 83 insertions(+), 6 deletions(-)
+
+-- 
+2.55.0
+
