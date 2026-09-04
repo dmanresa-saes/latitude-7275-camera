@@ -23,3 +23,10 @@ Antes de enviar: comprobar que el parche aplica sobre el árbol
 `platform-drivers-x86.git` rama `for-next` (`git apply --check`), y si el
 mantenedor prefiere que la nota de `acpi_enforce_resources=lax` vaya aparte,
 quitarla del mensaje.
+
+## ENVIADO el 2026-09-04 a las 08:20 (CEST)
+
+Con `git send-email` desde dmanresa@gmail.com, a los destinatarios de arriba.
+Message-ID: `<20260904062006.39209-1-dmanresa@gmail.com>`
+Archivo publico: https://lore.kernel.org/platform-driver-x86/20260904062006.39209-1-dmanresa@gmail.com/
+Seguimiento: respuestas al hilo en Gmail; si piden v2, `git format-patch -v2` y responder con `--in-reply-to` a ese Message-ID.
