@@ -20,3 +20,13 @@ Segunda tanda (tras validar el lens shading con la pared uniforme): Ccm,
 Lsc, Saturation, Sharpness y los mandos del Awb. Están en
 `libcamera-0.7.0-ipu3-ccm-oem.patch` contra 0.7.0; habrá que portarlos a
 master igual que estos (`ValueNode` en vez de `YamlObject`).
+
+## ENVIADA la primera tanda el 2026-09-04 a las 08:28 (CEST)
+
+A libcamera-devel@lists.libcamera.org con `git send-email`, desde dmanresa@gmail.com.
+Antes de enviar se corrigio el `From:` de la carta (salia el usuario local) y se
+anadio el enlace al repositorio.
+Message-ID de la carta: `<20260904062840.46739-1-dmanresa@gmail.com>` (parches -2, -3, -4).
+Archivo: https://patchwork.libcamera.org/project/libcamera/list/?submitter=dmanresa
+Seguimiento: respuestas en Gmail; para v2, `git format-patch -v2 --cover-letter` y
+`--in-reply-to` al Message-ID de la carta.

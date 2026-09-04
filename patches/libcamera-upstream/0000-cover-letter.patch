@@ -1,5 +1,5 @@
 From c39d22c090e29a6668095d97c35d215484dd71ca Mon Sep 17 00:00:00 2001
-From: gentoo <gentoo@latitude7275.(none)>
+From: "D. Manresa" <dmanresa@gmail.com>
 Date: Thu, 3 Sep 2026 12:52:20 +0200
 Subject: [PATCH 0/3] ipa: ipu3: black level, gamma and AGC fixes from a Dell Latitude 7275
 
@@ -19,7 +19,10 @@ IPU3 8086:1919):
 
 All measurements were made with synthetic parameter tables and by reading
 the NV12 output statistics; details and tools are available at the
-project repository (see README). Follow-up series will add a Ccm
+project repository:
+https://github.com/dmanresa-saes/latitude-7275-camera
+
+Follow-up series will add a Ccm
 algorithm ported from rkisp1, lens shading through the SHD block, and
 controls for the TCC chroma gain and IEFD sharpening.
 
