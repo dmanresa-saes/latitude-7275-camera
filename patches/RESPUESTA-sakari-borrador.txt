@@ -1,0 +1,31 @@
+Para: sakari.ailus@linux.intel.com
+Cc: dan.scally@ideasonboard.com, hansg@kernel.org, ilpo.jarvinen@linux.intel.com,
+    platform-driver-x86@vger.kernel.org, linux-kernel@vger.kernel.org
+In-Reply-To: (Message-ID del correo de Sakari, hilo <20260904062006.39209-1-dmanresa@gmail.com>)
+Asunto: Re: [PATCH] platform/x86: int3472: Add TPS68470 board data for Dell Latitude 7275
+
+Hi Sakari,
+
+On Fri, 4 Sep 2026, Sakari Ailus wrote:
+> What's below would better fit after the '---' line.
+
+Will do in v2.
+
+> Is this the same issue than for Latutude 5285 here
+> <URL:https://lore.kernel.org/linux-media/20260831160754.9857-1-tchatard@gmail.com/>?
+
+Yes, exactly the same: on the 7275 the GEXP device declares
+OperationRegion (BAR0, SystemMemory, SB04, 0x208) and the I2C4 controller
+(INT3446) builds its _CRS from the same SB04 variable, so intel_lpss_acpi
+fails with -EBUSY unless acpi_enforce_resources=lax. Thierry's patch 1/8
+would fix it here too with a "Latitude 7275" entry added to
+intel_lpss_quirk_dmi[]. I'll send that as a small patch on top of his
+series (or Thierry, if you prefer to fold it into v11, I'm happy to
+provide a Tested-by).
+
+The other 5285 quirk, the static clock consumer list for the broken
+INT3479 _DEP, is not needed on the 7275: the tps68470-clk already shows
+i2c-INT3479:00 as a consumer.
+
+Thanks,
+D.
