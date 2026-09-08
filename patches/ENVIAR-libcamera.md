@@ -81,3 +81,17 @@ Rama local: `ipu3-agc-v2` en ~/camara/libcamera (3 commits sobre origin/master).
 Compilar: `meson setup build-ipu3 -Dpipelines=ipu3 -Dipas=ipu3` y probar sin
 instalar con LD_LIBRARY_PATH/LIBCAMERA_IPA_MODULE_PATH/LIBCAMERA_IPA_CONFIG_PATH
 (ver ~/camara-ipu3/runcam.sh).
+
+## Gamma: prueba de la serie de Dan hecha el 2026-09-08 (18:40)
+Serie v3 (patchwork 6162) sobre master c08caf6, compilada con -Dwerror=false
+(usa `Span` obsoleto). Con uncalibrated.yaml + `gamma:` bajo ToneMapping,
+1280x720 NV12, misma escena: gamma 0.5 -> mediana Y 28 (P10 4, P90 76);
+1.1 -> 110 (43, 163); 3.0 -> 187 (133, 217). LA LUT SI SE RESPETA: nuestra
+afirmacion de que el firmware la ignoraba era falsa (algo fallaba en la
+prueba de 0.7.0, no en el ImgU). Respondido a Dan con Tested-by para sus
+dos parches de gamma del IPU3, Message-ID <20260908164118.342206-1-dmanresa@gmail.com>.
+Consecuencia para nuestro tuning 0.7.0 (ov5670.yaml): cuando llegue la serie
+de Dan a master, la gamma se ajusta con `gamma:` en el tuning, sin parche.
+Nota: en master (con y sin la serie) el AGC del IPU3 escupe "Effective
+exposure value is 0. This is a bug in AGC" en los primeros fotogramas; la
+imagen sale bien. No es nuestro; vigilar si alguien lo reporta.
