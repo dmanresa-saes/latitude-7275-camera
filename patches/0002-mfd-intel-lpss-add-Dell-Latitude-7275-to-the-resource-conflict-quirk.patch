@@ -1,0 +1,49 @@
+From: D. Manresa <dmanresa@gmail.com>
+Subject: [PATCH] mfd: intel-lpss: add Dell Latitude 7275 to the resource conflict quirk
+
+The Dell Latitude 7275 2-in-1 has the same BIOS bug as the Latitude 5285:
+the ACPI GEXP device declares an OperationRegion (BAR0) on the GNVS
+variable SB04 and the I2C4 controller (INT3446) builds its _CRS from that
+same variable, so intel_lpss_acpi fails to bind the controller with
+-EBUSY and the front camera sensor (OV5670, INT3479) is never registered
+unless acpi_enforce_resources=lax is passed.
+
+Add the machine to the DMI table so QUIRK_IGNORE_RESOURCE_CONFLICTS is
+applied to INT3446 on it as well.
+
+Assisted-by: Claude Code:claude-fable-5-1
+Signed-off-by: D. Manresa <dmanresa@gmail.com>
+---
+Applies on top of "mfd: intel-lpss: add resource conflict quirk for Dell
+Latitude 5285" from Thierry Chatard's v10 series [1]. Thierry, feel free
+to fold this into v11 instead if you prefer.
+
+The conflict was verified in the 7275 DSDT (BIOS 1.18.0): GEXP has
+OperationRegion (BAR0, SystemMemory, SB04, 0x0208) and INT3446._CRS
+returns LCRS (SMD4, SB04, SIR4). With acpi_enforce_resources=lax, which
+has the same effect as the quirk, the controller binds and the camera
+works with the board data from "platform/x86: int3472: Add TPS68470 board
+data for Dell Latitude 7275" [2]. The distribution kernel here builds
+intel-lpss-acpi in, so this exact patch has not been run yet.
+
+[1] https://lore.kernel.org/linux-media/20260831160754.9857-2-tchatard@gmail.com/
+[2] https://lore.kernel.org/platform-driver-x86/20260908161445.334910-1-dmanresa@gmail.com/
+
+ drivers/mfd/intel-lpss-acpi.c | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+--- a/drivers/mfd/intel-lpss-acpi.c
++++ b/drivers/mfd/intel-lpss-acpi.c
+@@ -191,6 +191,12 @@ static const struct dmi_system_id intel_lpss_quirk_dmi[] = {
+ 			DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "Latitude 5285"),
+ 		},
+ 	},
++	{
++		.matches = {
++			DMI_EXACT_MATCH(DMI_SYS_VENDOR, "Dell Inc."),
++			DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "Latitude 7275"),
++		},
++	},
+ 	{ }
+ };
+ 

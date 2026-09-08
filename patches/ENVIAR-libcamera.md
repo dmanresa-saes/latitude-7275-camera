@@ -64,3 +64,20 @@ el mismo dia. Resumen y plan:
 Trabajo que queda en el clon ~/camara/libcamera: master local esta 59
 commits detras de origin y con cambios sin guardar en awb.h y softisp/agc.cpp
 (revisar antes de rebasar).
+
+## ENVIADO el 2026-09-08 (v2), ficheros en `libcamera-upstream/v2/`
+- [PATCH v2] ipa: ipu3: agc: Fix swapped green and blue gains (rebase + Reviewed-by Dan),
+  Message-ID <20260908161805.335568-1-dmanresa@gmail.com>, en el hilo del 1/3.
+- [PATCH v2 0/2] ipa: ipu3: Take the OV5670 black level from the sensor helper,
+  Message-ID <20260908163708.341308-1-dmanresa@gmail.com>, en el hilo del 2/3:
+  1/2 helper ov5670 blackLevel_=4096; 2/2 BLC lee el helper y desplaza >>5.
+  Medido (misma escena, uncalibrated.yaml, NV12 limitado): con 64 el
+  percentil 1 de Y es 32 y U/V oscuro 132/131; con 128, 15 y 128/128.
+  Herramienta: `~/camara-ipu3/blackpoint.py ANCHO ALTO f.nv12`.
+- Gamma (3/3): retirado. Prueba de la serie de Dan (6162) en curso: no
+  compila sobre master actual con -Werror (usa `Span` obsoleto); se
+  compila con -Dwerror=false en un worktree.
+Rama local: `ipu3-agc-v2` en ~/camara/libcamera (3 commits sobre origin/master).
+Compilar: `meson setup build-ipu3 -Dpipelines=ipu3 -Dipas=ipu3` y probar sin
+instalar con LD_LIBRARY_PATH/LIBCAMERA_IPA_MODULE_PATH/LIBCAMERA_IPA_CONFIG_PATH
+(ver ~/camara-ipu3/runcam.sh).

@@ -62,3 +62,29 @@ Plan (v2):
   dar Tested-by hay que compilar intel-lpss-acpi con su parche: en el kernel
   dist-bin es built-in (CONFIG_MFD_INTEL_LPSS_ACPI=y), asi que exige kernel
   propio (punto 3 de ESTADO Y PENDIENTES) o fiarse del analisis del DSDT.
+
+## ENVIADO el 2026-09-08 (18:13-18:16 CEST)
+- Respuesta a Sakari: Message-ID <20260908161322.334690-1-dmanresa@gmail.com>
+  (confirma que el conflicto I2C4/GEXP es el mismo que el del 5285).
+- v2 del parche int3472 (`v2-0001-platform-x86-int3472-...patch`), hilo del
+  original: Message-ID <20260908161445.334910-1-dmanresa@gmail.com>.
+- Parche nuevo `0002-mfd-intel-lpss-add-Dell-Latitude-7275-to-the-resource-conflict-quirk.patch`,
+  enhebrado bajo el 1/8 de Thierry, To: Lee Jones (mfd), Cc Thierry, Andy
+  Shevchenko, Hans, Ilpo, Sakari, Dan, LKML, pdx86, linux-media.
+  Message-ID <20260908161629.335223-1-dmanresa@gmail.com>. Aplica sobre
+  mainline + 1/8 de Thierry (comprobado con git apply). No probado en
+  ejecucion (intel-lpss-acpi es built-in en el kernel dist-bin); dicho en
+  el correo.
+
+## Hallazgo del 2026-09-08: la camara muere tras HIBERNAR (PMIC TPS68470)
+Tras la hibernacion del 07-09 el PMIC volvio a sus valores de reset
+(CORE 0,9 V, ANA/AUX 0,875 V en vez de 1,2 / 2,815 / 1,213 / 1,8 V) y el
+sensor no responde por I2C ("ov5670_start_streaming failed to set powerup
+registers"). Los drivers tps68470-regulator/gpio/clk no reprograman el chip
+al reanudar. Rebind del PMIC imposible con el driver de serie: exige
+consumidores ACPI (_DEP) y esa lista se vacia al arrancar ("INT3472 seems
+to have no dependents"). Solucion local: `int3472-clk-consumidores-estaticos.patch`
+en nuestro modulo fuera de arbol (lista estatica de consumidores de reloj
+en la board data, mismo espiritu que el 4/8 de Thierry) + script
+`~/.local/bin/rearmar-camara` (unbind/bind PMIC y sensor). CANDIDATO A
+PARCHE UPSTREAM: tps68470 mfd/regulator sin restore tras hibernacion.

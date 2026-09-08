@@ -1,0 +1,135 @@
+From 5353e0bc691d1caa0c512d60eecc7825658fcfa8 Mon Sep 17 00:00:00 2001
+From: "D. Manresa" <dmanresa@gmail.com>
+Date: Tue, 8 Sep 2026 18:20:36 +0200
+Subject: [PATCH v2 2/2] ipa: ipu3: blc: Use the black level from the camera
+ sensor helper
+
+The black level correction algorithm hard-codes an optical black level of
+64 for the four Bayer channels. Take it from the camera sensor helper
+instead, like the RkISP1 IPA does, falling back to the historical value
+with a warning when the helper does not provide one.
+
+The helper reports the level as a 16-bit value, while the ImgU OB grid
+expects units of half a 10-bit LSB: on a Dell Latitude 7275 (OV5670,
+black level 64 at 10 bits) a correction of 64 leaves a residual pedestal
+in the AWB statistics and in the image, which the colour gains then
+amplify into a blue or cyan cast; 128 removes the pedestal and 192 clips
+dark areas to zero. The 16-bit value is therefore shifted right by 5,
+giving 128 for the OV5670.
+
+Measured on the same indoor scene with the uncalibrated tuning file
+(NV12, limited range, black = 16): with 64 the darkest percentile of Y
+is 32 and its mean chroma is U/V = 132/131; with 128 they are 15 and
+128/128.
+
+Signed-off-by: D. Manresa <dmanresa@gmail.com>
+---
+ src/ipa/ipu3/algorithms/blc.cpp | 56 +++++++++++++++++++++++++++------
+ src/ipa/ipu3/algorithms/blc.h   |  5 +++
+ 2 files changed, 52 insertions(+), 9 deletions(-)
+
+diff --git a/src/ipa/ipu3/algorithms/blc.cpp b/src/ipa/ipu3/algorithms/blc.cpp
+index 35748fb..1cd2c6b 100644
+--- a/src/ipa/ipu3/algorithms/blc.cpp
++++ b/src/ipa/ipu3/algorithms/blc.cpp
+@@ -7,6 +7,10 @@
+ 
+ #include "blc.h"
+ 
++#include <libcamera/base/log.h>
++
++#include "libipa/camera_sensor_helper.h"
++
+ /**
+  * \file blc.h
+  * \brief IPU3 Black Level Correction control
+@@ -30,8 +34,46 @@ namespace ipa::ipu3::algorithms {
+  * isn't currently supported.
+  */
+ 
++LOG_DEFINE_CATEGORY(IPU3Blc)
++
++/*
++ * Black level used when the camera sensor helper does not provide one,
++ * expressed in ImgU units (see init()). This is the historical value that
++ * was hard-coded before the level came from the helper.
++ */
++static constexpr int16_t kDefaultBlackLevel = 64;
++
+ BlackLevelCorrection::BlackLevelCorrection()
++	: blackLevel_(kDefaultBlackLevel)
++{
++}
++
++/**
++ * \copydoc libcamera::ipa::Algorithm::init
++ *
++ * Get the sensor black level from the camera sensor helper. The helper
++ * reports it as a 16-bit value, while the ImgU OB grid expects it in units
++ * of half a 10-bit LSB: on an OV5670 (black level 64 at 10 bits) a
++ * correction of 64 leaves a residual pedestal of about 9/255 in the AWB
++ * statistics and in the image, 128 removes it, and 192 clips dark areas to
++ * zero. The 16-bit value is therefore shifted right by 5.
++ */
++int BlackLevelCorrection::init(IPAContext &context,
++			       [[maybe_unused]] const ValueNode &tuningData)
+ {
++	std::optional<int16_t> blackLevel = context.camHelper->blackLevel();
++	if (!blackLevel) {
++		LOG(IPU3Blc, Warning)
++			<< "No black level provided by camera sensor helper"
++			<< ", please fix";
++		blackLevel_ = kDefaultBlackLevel;
++	} else {
++		blackLevel_ = *blackLevel >> 5;
++	}
++
++	LOG(IPU3Blc, Debug) << "Black level " << blackLevel_;
++
++	return 0;
+ }
+ 
+ /**
+@@ -49,15 +91,11 @@ void BlackLevelCorrection::prepare([[maybe_unused]] IPAContext &context,
+ 				   [[maybe_unused]] IPAFrameContext &frameContext,
+ 				   ipu3_uapi_params *params)
+ {
+-	/*
+-	 * The Optical Black Level correction values
+-	 * \todo The correction values should come from sensor specific
+-	 * tuning processes. This is a first rough approximation.
+-	 */
+-	params->obgrid_param.gr = 64;
+-	params->obgrid_param.r = 64;
+-	params->obgrid_param.b = 64;
+-	params->obgrid_param.gb = 64;
++	/* The Optical Black Level correction values */
++	params->obgrid_param.gr = blackLevel_;
++	params->obgrid_param.r = blackLevel_;
++	params->obgrid_param.b = blackLevel_;
++	params->obgrid_param.gb = blackLevel_;
+ 
+ 	/* Enable the custom black level correction processing */
+ 	params->use.obgrid = 1;
+diff --git a/src/ipa/ipu3/algorithms/blc.h b/src/ipa/ipu3/algorithms/blc.h
+index 6274804..58cdd92 100644
+--- a/src/ipa/ipu3/algorithms/blc.h
++++ b/src/ipa/ipu3/algorithms/blc.h
+@@ -18,9 +18,14 @@ class BlackLevelCorrection : public Algorithm
+ public:
+ 	BlackLevelCorrection();
+ 
++	int init(IPAContext &context, const ValueNode &tuningData) override;
++
+ 	void prepare(IPAContext &context, const uint32_t frame,
+ 		     IPAFrameContext &frameContext,
+ 		     ipu3_uapi_params *params) override;
++
++private:
++	int16_t blackLevel_;
+ };
+ 
+ } /* namespace ipa::ipu3::algorithms */
+-- 
+2.55.0
+

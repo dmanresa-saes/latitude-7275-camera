@@ -1,0 +1,33 @@
+From b03c5f9849a2f6c2c2935570692cf86f6ed343d6 Mon Sep 17 00:00:00 2001
+From: "D. Manresa" <dmanresa@gmail.com>
+Date: Tue, 8 Sep 2026 18:19:57 +0200
+Subject: [PATCH v2 1/2] ipa: libipa: camera_sensor_helper: Add OV5670 black
+ level
+
+The OV5670 has a black level of 64 at 10 bits, the sensor's default BLC
+target. This was confirmed on a Dell Latitude 7275 by reading the ImgU
+statistics and dark frames with different black level corrections.
+Provide it in the camera sensor helper so that IPAs can use it instead of
+hard-coded or tuning-file values.
+
+Signed-off-by: D. Manresa <dmanresa@gmail.com>
+---
+ src/ipa/libipa/camera_sensor_helper.cpp | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/src/ipa/libipa/camera_sensor_helper.cpp b/src/ipa/libipa/camera_sensor_helper.cpp
+index 82bf255..eeb3277 100644
+--- a/src/ipa/libipa/camera_sensor_helper.cpp
++++ b/src/ipa/libipa/camera_sensor_helper.cpp
+@@ -802,6 +802,8 @@ class CameraSensorHelperOv5670 : public CameraSensorHelper
+ public:
+ 	CameraSensorHelperOv5670()
+ 	{
++		/* Default BLC target of 64 at 10bits, confirmed by measurement. */
++		blackLevel_ = 4096;
+ 		gain_ = AnalogueGainLinear{ 1, 0, 0, 128 };
+ 	}
+ };
+-- 
+2.55.0
+

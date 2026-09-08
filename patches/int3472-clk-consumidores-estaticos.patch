@@ -1,0 +1,72 @@
+diff --git a/drivers/platform/x86/intel/int3472/.module-common.o b/drivers/platform/x86/intel/int3472/.module-common.o
+index b425add..0ee32cc 100644
+Binary files a/drivers/platform/x86/intel/int3472/.module-common.o and b/drivers/platform/x86/intel/int3472/.module-common.o differ
+diff --git a/drivers/platform/x86/intel/int3472/tps68470.c b/drivers/platform/x86/intel/int3472/tps68470.c
+index 0133405..f57a234 100644
+--- a/drivers/platform/x86/intel/int3472/tps68470.c
++++ b/drivers/platform/x86/intel/int3472/tps68470.c
+@@ -113,6 +113,26 @@ skl_int3472_fill_clk_pdata(struct device *dev, struct tps68470_clk_platform_data
+ 		n_consumers++;
+ 
+ 	if (!n_consumers) {
++		const struct int3472_tps68470_board_data *board_data =
++			int3472_tps68470_get_board_data(dev_name(dev));
++
++		if (board_data && board_data->n_clk_consumers) {
++			n_consumers = board_data->n_clk_consumers;
++			*clk_pdata = devm_kzalloc(dev, struct_size(*clk_pdata, consumers, n_consumers),
++						  GFP_KERNEL);
++			if (!*clk_pdata)
++				return -ENOMEM;
++
++			(*clk_pdata)->n_consumers = n_consumers;
++			for (i = 0; i < n_consumers; i++)
++				(*clk_pdata)->consumers[i].consumer_dev_name =
++					board_data->clk_consumers[i];
++
++			dev_info(dev, "No ACPI dependents, using %u static clock consumer(s)\n",
++				 n_consumers);
++			return n_consumers;
++		}
++
+ 		dev_err(dev, "INT3472 seems to have no dependents\n");
+ 		return -ENODEV;
+ 	}
+diff --git a/drivers/platform/x86/intel/int3472/tps68470.h b/drivers/platform/x86/intel/int3472/tps68470.h
+index 35915e7..eda1921 100644
+--- a/drivers/platform/x86/intel/int3472/tps68470.h
++++ b/drivers/platform/x86/intel/int3472/tps68470.h
+@@ -18,6 +18,13 @@ struct int3472_tps68470_board_data {
+ 	const char *dev_name;
+ 	const struct tps68470_regulator_platform_data *tps68470_regulator_pdata;
+ 	unsigned int n_gpiod_lookups;
++	/*
++	 * Optional static list of tps68470-clk consumers, used when the ACPI
++	 * _DEP consumer list is empty (e.g. when the driver is re-bound after
++	 * the dependencies were already cleared at boot).
++	 */
++	unsigned int n_clk_consumers;
++	const char *const *clk_consumers;
+ 	struct gpiod_lookup_table *tps68470_gpio_lookup_tables[];
+ };
+ 
+diff --git a/drivers/platform/x86/intel/int3472/tps68470_board_data.c b/drivers/platform/x86/intel/int3472/tps68470_board_data.c
+index d98d1b0..97a662f 100644
+--- a/drivers/platform/x86/intel/int3472/tps68470_board_data.c
++++ b/drivers/platform/x86/intel/int3472/tps68470_board_data.c
+@@ -291,9 +291,15 @@ static const struct int3472_tps68470_board_data dell_7212_tps68470_board_data =
+  * Dell Latitude 7275: same TI TPS68470 + OV5670 (INT3479) camera design as
+  * the Latitude 7212, but the PMIC ACPI node enumerates as INT3472:04.
+  */
++static const char *const dell_7275_clk_consumers[] = {
++	"i2c-INT3479:00",	/* OV5670 front camera */
++};
++
+ static const struct int3472_tps68470_board_data dell_7275_tps68470_board_data = {
+ 	.dev_name = "i2c-INT3472:04",
+ 	.tps68470_regulator_pdata = &dell_7212_tps68470_pdata,
++	.n_clk_consumers = ARRAY_SIZE(dell_7275_clk_consumers),
++	.clk_consumers = dell_7275_clk_consumers,
+ 	.n_gpiod_lookups = 1,
+ 	.tps68470_gpio_lookup_tables = {
+ 		&dell_7212_int3479_gpios,
