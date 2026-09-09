@@ -116,3 +116,17 @@ intel-lpss; Andy Shevchenko pide que Thierry lo lleve como parche 2 de su
 v11 (contestado, Message-ID <20260909065104.15817-1-dmanresa@gmail.com>);
 falta el Ack de Lee Jones. El robot media-ci no pudo aplicarlo solo (depende
 de la serie del 5285): normal.
+
+## Segunda tanda: revision de Barnabas Pocze (09-09 09:34/09:48) y v2 ENVIADA (10:13 CEST)
+Barnabas (Ideas on Board) reviso los dos parches a la hora de enviarlos, solo
+estilo: float en vez de double; sin `static` en el namespace anonimo;
+cuantizar con `UQ<>` de libipa/fixedpoint.h (u12.0 ganancia TCC, u4.5
+unsharp amount, u1.6 dir_shrp, u13.0 limites); copiar r_sqr por asignacion
+de struct como el kernel; comentar que la config TCC replica
+imgu_css_cfg_acc(); tabla IEFD con inicializadores designados como
+ipu3-tables.c. Todo aplicado, recompilado y reprobado (croma dobla de 1.0 a
+2.0; nitidez 2,86 -> 4,10 de 1.0 a 9.0). v2 en `libcamera-upstream/round2-v2/`,
+Message-ID <20260909081355.28471-1-dmanresa@gmail.com>, cc Dan y Barnabas.
+Truco: al construir UQ<> desde un bitfield del uapi hay que hacer
+static_cast<uint16_t>/uint8_t o el constructor es ambiguo.
+Dan (09-09 08:53): agradece el Tested-by de gamma y arreglara Span en su v4.

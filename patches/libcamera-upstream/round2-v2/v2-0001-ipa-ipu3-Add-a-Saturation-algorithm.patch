@@ -1,0 +1,343 @@
+From 6b618fa8fa63ab6eb09232a0686cb68744fc1427 Mon Sep 17 00:00:00 2001
+From: "D. Manresa" <dmanresa@gmail.com>
+Date: Wed, 9 Sep 2026 10:13:40 +0200
+Subject: [PATCH v2 1/2] ipa: ipu3: Add a Saturation algorithm
+
+The Total Color Correction (TCC) block of the ImgU applies a chroma gain
+that depends on the pixel luminance. When the block is not programmed the
+ImgU driver enables it with a gain table that boosts the chroma by up to
+1.5 in the mid-tones, and there is currently no way to change that.
+
+Add a Saturation algorithm that programs the TCC block with the driver
+defaults and scales the gain table by a saturation factor: 1.0 keeps the
+driver behaviour, 0.0 gives a greyscale image and larger values increase
+the saturation. The default comes from the optional 'saturation' tuning
+parameter and can be changed at runtime with the Saturation control, which
+is also reported in the metadata.
+
+Enable the algorithm in the uncalibrated tuning file; with the default
+value the output is unchanged.
+
+Measured on a Dell Latitude 7275 (OV5670, 1280x720 NV12, same scene): the
+mean chroma |U-128|+|V-128| is 0.00, 7.97 and 15.83 for saturation 0.0,
+1.0 and 2.0.
+
+Signed-off-by: D. Manresa <dmanresa@gmail.com>
+---
+ src/ipa/ipu3/algorithms/meson.build    |   1 +
+ src/ipa/ipu3/algorithms/saturation.cpp | 202 +++++++++++++++++++++++++
+ src/ipa/ipu3/algorithms/saturation.h   |  43 ++++++
+ src/ipa/ipu3/data/uncalibrated.yaml    |   1 +
+ src/ipa/ipu3/ipa_context.h             |   9 ++
+ 5 files changed, 256 insertions(+)
+ create mode 100644 src/ipa/ipu3/algorithms/saturation.cpp
+ create mode 100644 src/ipa/ipu3/algorithms/saturation.h
+
+diff --git a/src/ipa/ipu3/algorithms/meson.build b/src/ipa/ipu3/algorithms/meson.build
+index 70177f5..833583e 100644
+--- a/src/ipa/ipu3/algorithms/meson.build
++++ b/src/ipa/ipu3/algorithms/meson.build
+@@ -7,5 +7,6 @@ ipu3_ipa_algorithms = files([
+     'blc.cpp',
+     'ccm.cpp',
+     'lsc.cpp',
++    'saturation.cpp',
+     'tone_mapping.cpp',
+ ])
+diff --git a/src/ipa/ipu3/algorithms/saturation.cpp b/src/ipa/ipu3/algorithms/saturation.cpp
+new file mode 100644
+index 0000000..8fb3c23
+--- /dev/null
++++ b/src/ipa/ipu3/algorithms/saturation.cpp
+@@ -0,0 +1,202 @@
++/* SPDX-License-Identifier: LGPL-2.1-or-later */
++/*
++ * Copyright (C) 2026, D. Manresa
++ *
++ * IPU3 Saturation control
++ */
++
++#include "saturation.h"
++
++#include <algorithm>
++#include <string.h>
++
++#include <libcamera/base/log.h>
++
++#include <libcamera/control_ids.h>
++
++#include "libcamera/internal/value_node.h"
++
++#include "libipa/fixedpoint.h"
++
++/**
++ * \file saturation.h
++ */
++
++namespace libcamera {
++
++namespace ipa::ipu3::algorithms {
++
++/**
++ * \class Saturation
++ * \brief Control of the colour saturation through the ImgU TCC block
++ *
++ * The Total Color Correction (TCC) block of the ImgU applies a chroma gain
++ * that depends on the pixel luminance. When the block is not programmed, the
++ * ImgU driver enables it with a gain look-up table that boosts the chroma by
++ * up to 1.5 in the mid-tones. This algorithm programs the block with the same
++ * default configuration and scales the gain table by the requested
++ * saturation, so that a value of 1.0 reproduces the driver defaults, 0.0
++ * gives a greyscale image and larger values increase the saturation.
++ *
++ * The default saturation is taken from the optional \a saturation tuning
++ * parameter (1.0 if absent) and can be changed at runtime with the
++ * controls::Saturation control.
++ */
++
++LOG_DEFINE_CATEGORY(IPU3Saturation)
++
++namespace {
++
++constexpr float kMinSaturation = 0.0f;
++constexpr float kMaxSaturation = 2.0f;
++
++/* clang-format off */
++/* imgu_css_tcc_gain_pcwl_lut from the ImgU driver (258 entries) */
++const uint16_t kDefaultGainPcwl[IPU3_UAPI_YUVP2_TCC_GAIN_PCWL_LUT_ELEMENTS] = {
++	1024, 1032, 1040, 1048, 1057, 1065, 1073, 1081, 1089, 1097, 1105, 1113,
++	1122, 1130, 1138, 1146, 1154, 1162, 1170, 1178, 1187, 1195, 1203, 1211,
++	1219, 1227, 1235, 1243, 1252, 1260, 1268, 1276, 1284, 1292, 1300, 1308,
++	1317, 1325, 1333, 1341, 1349, 1357, 1365, 1373, 1382, 1390, 1398, 1406,
++	1414, 1422, 1430, 1438, 1447, 1455, 1463, 1471, 1479, 1487, 1495, 1503,
++	1512, 1520, 1528, 1536, 1536, 1536, 1536, 1536, 1536, 1536, 1536, 1536,
++	1536, 1536, 1536, 1536, 1536, 1536, 1536, 1536, 1536, 1536, 1536, 1536,
++	1536, 1536, 1536, 1536, 1536, 1536, 1536, 1536, 1536, 1536, 1536, 1536,
++	1536, 1536, 1536, 1536, 1536, 1536, 1536, 1536, 1536, 1536, 1536, 1536,
++	1536, 1536, 1536, 1536, 1536, 1536, 1536, 1536, 1536, 1536, 1536, 1536,
++	1536, 1536, 1536, 1536, 1536, 1536, 1536, 1536, 1536, 1536, 1536, 1536,
++	1536, 1536, 1536, 1536, 1536, 1536, 1536, 1536, 1536, 1536, 1536, 1536,
++	1536, 1536, 1536, 1536, 1536, 1536, 1536, 1536, 1536, 1536, 1536, 1536,
++	1536, 1536, 1536, 1536, 1536, 1536, 1536, 1536, 1536, 1536, 1536, 1536,
++	1536, 1536, 1536, 1536, 1536, 1536, 1536, 1536, 1536, 1536, 1536, 1536,
++	1536, 1536, 1536, 1536, 1536, 1536, 1536, 1536, 1536, 1536, 1536, 1536,
++	1536, 1536, 1528, 1520, 1512, 1503, 1495, 1487, 1479, 1471, 1463, 1455,
++	1447, 1438, 1430, 1422, 1414, 1406, 1398, 1390, 1382, 1373, 1365, 1357,
++	1349, 1341, 1333, 1325, 1317, 1308, 1300, 1292, 1284, 1276, 1268, 1260,
++	1252, 1243, 1235, 1227, 1219, 1211, 1203, 1195, 1187, 1178, 1170, 1162,
++	1154, 1146, 1138, 1130, 1122, 1113, 1105, 1097, 1089, 1081, 1073, 1065,
++	1057, 1048, 1040, 1032, 1024
++};
++
++/* imgu_css_tcc_r_sqr_lut from the ImgU driver (24 entries, last one 0) */
++const struct ipu3_uapi_yuvp2_tcc_r_sqr_lut_static_config kDefaultRSqr = { {
++	32, 44, 64, 92, 128, 180, 256, 364, 512, 628, 724, 808, 888,
++	956, 1024, 1088, 1144, 1200, 1256, 1304, 1356, 1404, 1448, 0
++} };
++/* clang-format on */
++
++} /* namespace */
++
++/**
++ * \copydoc libcamera::ipa::Algorithm::init
++ */
++int Saturation::init(IPAContext &context, const ValueNode &tuningData)
++{
++	defaultSaturation_ = std::clamp(tuningData["saturation"].get<float>(1.0f),
++					kMinSaturation, kMaxSaturation);
++
++	context.ctrlMap[&controls::Saturation] =
++		ControlInfo(kMinSaturation, kMaxSaturation, defaultSaturation_);
++
++	return 0;
++}
++
++/**
++ * \copydoc libcamera::ipa::Algorithm::configure
++ */
++int Saturation::configure(IPAContext &context,
++			  [[maybe_unused]] const IPAConfigInfo &configInfo)
++{
++	context.activeState.saturation.value = defaultSaturation_;
++
++	return 0;
++}
++
++/**
++ * \copydoc libcamera::ipa::Algorithm::queueRequest
++ */
++void Saturation::queueRequest(IPAContext &context, const uint32_t frame,
++			      IPAFrameContext &frameContext,
++			      const ControlList &controls)
++{
++	auto &saturation = context.activeState.saturation;
++
++	frameContext.saturation.update = frame == 0;
++
++	const auto &value = controls.get(controls::Saturation);
++	if (value) {
++		saturation.value = std::clamp(*value, kMinSaturation, kMaxSaturation);
++		frameContext.saturation.update = true;
++		LOG(IPU3Saturation, Debug) << "Set saturation to " << saturation.value;
++	}
++
++	frameContext.saturation.value = saturation.value;
++}
++
++/**
++ * \copydoc libcamera::ipa::Algorithm::prepare
++ *
++ * Program the TCC block with the ImgU driver defaults, scaling the chroma gain
++ * table by the saturation of the frame.
++ */
++void Saturation::prepare([[maybe_unused]] IPAContext &context,
++			 [[maybe_unused]] const uint32_t frame,
++			 IPAFrameContext &frameContext,
++			 ipu3_uapi_params *params)
++{
++	if (!frameContext.saturation.update)
++		return;
++
++	const float saturation = frameContext.saturation.value;
++	struct ipu3_uapi_yuvp2_tcc_static_config &tcc = params->acc_param.tcc;
++
++	/*
++	 * Everything but the gain table replicates the configuration that the
++	 * ImgU driver programs when the block is left untouched, see
++	 * imgu_css_cfg_acc().
++	 */
++	memset(&tcc, 0, sizeof(tcc));
++
++	tcc.gen_control.en = 1;
++	tcc.gen_control.blend_shift = 3;
++	tcc.gen_control.gain_according_to_y_only = 1;
++	tcc.gen_control.gamma = 8;
++	tcc.gen_control.delta = 0;
++
++	for (unsigned int i = 0; i < IPU3_UAPI_YUVP2_TCC_MACC_TABLE_ELEMENTS; i++) {
++		tcc.macc_table.entries[i].a = 1024;
++		tcc.macc_table.entries[i].b = 0;
++		tcc.macc_table.entries[i].c = 0;
++		tcc.macc_table.entries[i].d = 1024;
++	}
++
++	tcc.inv_y_lut.entries[6] = 1023;
++	for (unsigned int i = 7; i < IPU3_UAPI_YUVP2_TCC_INV_Y_LUT_ELEMENTS; i++)
++		tcc.inv_y_lut.entries[i] = 1024 >> (i - 6);
++
++	tcc.r_sqr_lut = kDefaultRSqr;
++
++	/* The gain is u12.0. */
++	for (unsigned int i = 0; i < IPU3_UAPI_YUVP2_TCC_GAIN_PCWL_LUT_ELEMENTS; i++)
++		tcc.gain_pcwl.entries[i] =
++			UQ<12, 0>(saturation * kDefaultGainPcwl[i]).quantized();
++
++	params->use.acc_tcc = 1;
++}
++
++/**
++ * \copydoc libcamera::ipa::Algorithm::process
++ */
++void Saturation::process([[maybe_unused]] IPAContext &context,
++			 [[maybe_unused]] const uint32_t frame,
++			 IPAFrameContext &frameContext,
++			 [[maybe_unused]] const ipu3_uapi_stats_3a *stats,
++			 ControlList &metadata)
++{
++	metadata.set(controls::Saturation, frameContext.saturation.value);
++}
++
++REGISTER_IPA_ALGORITHM(Saturation, "Saturation")
++
++} /* namespace ipa::ipu3::algorithms */
++
++} /* namespace libcamera */
+diff --git a/src/ipa/ipu3/algorithms/saturation.h b/src/ipa/ipu3/algorithms/saturation.h
+new file mode 100644
+index 0000000..0abe32a
+--- /dev/null
++++ b/src/ipa/ipu3/algorithms/saturation.h
+@@ -0,0 +1,43 @@
++/* SPDX-License-Identifier: LGPL-2.1-or-later */
++/*
++ * Copyright (C) 2026, D. Manresa
++ *
++ * IPU3 Saturation control
++ */
++
++#pragma once
++
++#include <linux/intel-ipu3.h>
++
++#include "algorithm.h"
++
++namespace libcamera {
++
++namespace ipa::ipu3::algorithms {
++
++class Saturation : public Algorithm
++{
++public:
++	Saturation() = default;
++	~Saturation() = default;
++
++	int init(IPAContext &context, const ValueNode &tuningData) override;
++	int configure(IPAContext &context, const IPAConfigInfo &configInfo) override;
++	void queueRequest(IPAContext &context, const uint32_t frame,
++			  IPAFrameContext &frameContext,
++			  const ControlList &controls) override;
++	void prepare(IPAContext &context, const uint32_t frame,
++		     IPAFrameContext &frameContext,
++		     ipu3_uapi_params *params) override;
++	void process(IPAContext &context, const uint32_t frame,
++		     IPAFrameContext &frameContext,
++		     const ipu3_uapi_stats_3a *stats,
++		     ControlList &metadata) override;
++
++private:
++	float defaultSaturation_ = 1.0f;
++};
++
++} /* namespace ipa::ipu3::algorithms */
++
++} /* namespace libcamera */
+diff --git a/src/ipa/ipu3/data/uncalibrated.yaml b/src/ipa/ipu3/data/uncalibrated.yaml
+index 415ca45..b7ab0d7 100644
+--- a/src/ipa/ipu3/data/uncalibrated.yaml
++++ b/src/ipa/ipu3/data/uncalibrated.yaml
+@@ -9,4 +9,5 @@ algorithms:
+   - BlackLevelCorrection:
+   - Ccm:
+   - ToneMapping:
++  - Saturation:
+ ...
+diff --git a/src/ipa/ipu3/ipa_context.h b/src/ipa/ipu3/ipa_context.h
+index fde628c..3d01a02 100644
+--- a/src/ipa/ipu3/ipa_context.h
++++ b/src/ipa/ipu3/ipa_context.h
+@@ -55,6 +55,10 @@ struct IPAActiveState {
+ 	ipa::ccm::ActiveState ccm;
+ 	ipa::gamma::ActiveState gamma;
+ 	ipa::lsc::ActiveState lsc;
++
++	struct {
++		float value;
++	} saturation;
+ };
+ 
+ struct IPAFrameContext : public FrameContext {
+@@ -68,6 +72,11 @@ struct IPAFrameContext : public FrameContext {
+ 	ipa::ccm::FrameContext ccm;
+ 	ipa::gamma::FrameContext gamma;
+ 	ipa::lsc::FrameContext lsc;
++
++	struct {
++		float value;
++		bool update;
++	} saturation;
+ };
+ 
+ struct IPAContext {
+-- 
+2.55.0
+

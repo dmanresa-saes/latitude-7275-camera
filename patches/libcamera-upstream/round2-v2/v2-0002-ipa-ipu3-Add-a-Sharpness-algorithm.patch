@@ -1,0 +1,351 @@
+From 14cc694a68375692de23ba9e3e1c60245d3d05d9 Mon Sep 17 00:00:00 2001
+From: "D. Manresa" <dmanresa@gmail.com>
+Date: Wed, 9 Sep 2026 10:13:40 +0200
+Subject: [PATCH v2 2/2] ipa: ipu3: Add a Sharpness algorithm
+
+The Image Enhancement Filter Directed (IEFD) block of the ImgU combines
+denoising with directional and unsharp-mask sharpening. It is the
+sharpening block that the ImgU firmware binaries actually run: none of
+them enables the Y_EE_NR edge enhancement accelerator, so programming that
+block has no effect. When IEFD is not programmed the driver enables it with
+a moderate default sharpening, and there is currently no way to change it.
+
+Add a Sharpness algorithm that programs the IEFD block with the driver
+defaults and scales the sharpening parameters (unsharp mask amount,
+directional sharpening weight and overshoot limits) by a sharpness
+factor: 1.0 keeps the driver behaviour, 0.0 disables the sharpening while
+keeping the denoising, and values up to 9.0 (where the unsharp mask amount
+saturates) sharpen more. The default comes from the optional 'sharpness'
+tuning parameter and can be changed at runtime with the Sharpness
+control, which is also reported in the metadata.
+
+Enable the algorithm in the uncalibrated tuning file; with the default
+value the output is unchanged.
+
+Measured on a Dell Latitude 7275 (OV5670, 1280x720 NV12, same scene): the
+standard deviation of the Laplacian of Y is 2.24, 2.47, 2.81 and 3.43 for
+sharpness 0.0, 1.0, 4.0 and 9.0, with the mean luminance and chroma
+unchanged.
+
+Signed-off-by: D. Manresa <dmanresa@gmail.com>
+---
+ src/ipa/ipu3/algorithms/meson.build   |   1 +
+ src/ipa/ipu3/algorithms/sharpness.cpp | 205 ++++++++++++++++++++++++++
+ src/ipa/ipu3/algorithms/sharpness.h   |  43 ++++++
+ src/ipa/ipu3/data/uncalibrated.yaml   |   1 +
+ src/ipa/ipu3/ipa_context.h            |   9 ++
+ 5 files changed, 259 insertions(+)
+ create mode 100644 src/ipa/ipu3/algorithms/sharpness.cpp
+ create mode 100644 src/ipa/ipu3/algorithms/sharpness.h
+
+diff --git a/src/ipa/ipu3/algorithms/meson.build b/src/ipa/ipu3/algorithms/meson.build
+index 833583e..fd97330 100644
+--- a/src/ipa/ipu3/algorithms/meson.build
++++ b/src/ipa/ipu3/algorithms/meson.build
+@@ -8,5 +8,6 @@ ipu3_ipa_algorithms = files([
+     'ccm.cpp',
+     'lsc.cpp',
+     'saturation.cpp',
++    'sharpness.cpp',
+     'tone_mapping.cpp',
+ ])
+diff --git a/src/ipa/ipu3/algorithms/sharpness.cpp b/src/ipa/ipu3/algorithms/sharpness.cpp
+new file mode 100644
+index 0000000..afdc29f
+--- /dev/null
++++ b/src/ipa/ipu3/algorithms/sharpness.cpp
+@@ -0,0 +1,205 @@
++/* SPDX-License-Identifier: LGPL-2.1-or-later */
++/*
++ * Copyright (C) 2026, D. Manresa
++ *
++ * IPU3 Sharpness control
++ */
++
++#include "sharpness.h"
++
++#include <algorithm>
++
++#include <libcamera/base/log.h>
++
++#include <libcamera/control_ids.h>
++
++#include "libcamera/internal/value_node.h"
++
++#include "libipa/fixedpoint.h"
++
++/**
++ * \file sharpness.h
++ */
++
++namespace libcamera {
++
++namespace ipa::ipu3::algorithms {
++
++/**
++ * \class Sharpness
++ * \brief Control of the sharpening through the ImgU IEFD block
++ *
++ * The Image Enhancement Filter Directed (IEFD) block of the ImgU combines
++ * denoising with a directional and an unsharp-mask sharpening. It is the
++ * sharpening block that the ImgU firmware binaries actually run: the Y_EE_NR
++ * edge enhancement block is never enabled by any of them, so programming it
++ * has no effect.
++ *
++ * When the IEFD block is not programmed the ImgU driver enables it with a
++ * moderate default sharpening. This algorithm programs the block with the
++ * same default configuration and scales the sharpening strength, that is the
++ * unsharp mask amount, the directional sharpening weight and the overshoot
++ * limits, by the requested sharpness. A value of 1.0 reproduces the driver
++ * defaults, 0.0 disables the sharpening while keeping the denoising active,
++ * and larger values sharpen more.
++ *
++ * The default sharpness is taken from the optional \a sharpness tuning
++ * parameter (1.0 if absent) and can be changed at runtime with the
++ * controls::Sharpness control.
++ */
++
++LOG_DEFINE_CATEGORY(IPU3Sharpness)
++
++namespace {
++
++constexpr float kMinSharpness = 0.0f;
++/* The unsharp mask amount saturates at 511, 9 times the default of 56. */
++constexpr float kMaxSharpness = 9.0f;
++
++/* clang-format off */
++/* imgu_css_iefd_defaults from the ImgU driver (ipu3-tables.c) */
++const struct ipu3_uapi_yuvp1_iefd_config kIefdDefaults = {
++	.units = {
++		.cu_1 = { 0, 150, 7, 0 },
++		.cu_ed = { 7, 110, 244, 0, 307, 409, 511, 0,
++			   184, 255, 255, 0, 0, 0, 0,
++			   7, 81, 255, 0, 255, 255, 0 },
++		.cu_3 = { 148, 251, 10, 0 },
++		.cu_5 = { 25, 70, 501, 0, 32, 0 },
++		.cu_6 = { 32, 63, 183, 0, 397,
++			  33, 0, 0, 0,
++			  0, 64, 0, 64, 0 },
++		.cu_7 = { 200, 303,
++			  10, 0 },
++		.cu_unsharp = { 10, 64, 110, 0, 511,
++				66, 12, 0, 0,
++				0, 56, 0, 64, 0 },
++		.cu_radial = { 6, 203, 255, 255, 255, 255, 0,
++			       84, 444, 397, 288, 300, 0,
++			       4, 69, 207, 0, 369, 448, 0 },
++		.cu_vssnlm = { 61, 100, 25, 0 }
++	},
++	.config = { 45, 0, 0, 0, 16, 0, 45, 0 },
++	.control = { 1, 1, 1, 1, 1, 0 },
++	.sharp = { { 50, 0, 511, 0, 50, 0, 50, 0 },
++		   { 64, 0, 0, 0, 0, 0 },
++		   { 56, 0, 56, 0 } },
++	.unsharp = { { 36, 17, 8, 0 },
++		     { 13, 7, 3, 0 } },
++	.rad = { { -2104, 0, -1559, 0 },
++		 { 4426816, 0 },
++		 { 2430481, 0 },
++		 { 6, 0, 79, 0 },
++		 { 64, 0, 0, 0 },
++		 { 1, 0, 2, 0, 0, 0, 0, 0 },
++		 { 40, 0, 62, 0 } },
++	.vsslnm = { { 16, 32, 64, 0 },
++		    { 1, 0, 2, 0, 8, 0 } },
++};
++/* clang-format on */
++
++} /* namespace */
++
++/**
++ * \copydoc libcamera::ipa::Algorithm::init
++ */
++int Sharpness::init(IPAContext &context, const ValueNode &tuningData)
++{
++	defaultSharpness_ = std::clamp(tuningData["sharpness"].get<float>(1.0f),
++				       kMinSharpness, kMaxSharpness);
++
++	context.ctrlMap[&controls::Sharpness] =
++		ControlInfo(kMinSharpness, kMaxSharpness, defaultSharpness_);
++
++	return 0;
++}
++
++/**
++ * \copydoc libcamera::ipa::Algorithm::configure
++ */
++int Sharpness::configure(IPAContext &context,
++			 [[maybe_unused]] const IPAConfigInfo &configInfo)
++{
++	context.activeState.sharpness.value = defaultSharpness_;
++
++	return 0;
++}
++
++/**
++ * \copydoc libcamera::ipa::Algorithm::queueRequest
++ */
++void Sharpness::queueRequest(IPAContext &context, const uint32_t frame,
++			     IPAFrameContext &frameContext,
++			     const ControlList &controls)
++{
++	auto &sharpness = context.activeState.sharpness;
++
++	frameContext.sharpness.update = frame == 0;
++
++	const auto &value = controls.get(controls::Sharpness);
++	if (value) {
++		sharpness.value = std::clamp(*value, kMinSharpness, kMaxSharpness);
++		frameContext.sharpness.update = true;
++		LOG(IPU3Sharpness, Debug) << "Set sharpness to " << sharpness.value;
++	}
++
++	frameContext.sharpness.value = sharpness.value;
++}
++
++/**
++ * \copydoc libcamera::ipa::Algorithm::prepare
++ *
++ * Program the IEFD block with the ImgU driver defaults, scaling the
++ * sharpening parameters by the sharpness of the frame.
++ */
++void Sharpness::prepare([[maybe_unused]] IPAContext &context,
++			[[maybe_unused]] const uint32_t frame,
++			IPAFrameContext &frameContext,
++			ipu3_uapi_params *params)
++{
++	if (!frameContext.sharpness.update)
++		return;
++
++	const float sharpness = frameContext.sharpness.value;
++	struct ipu3_uapi_yuvp1_iefd_config &iefd = params->acc_param.iefd;
++
++	iefd = kIefdDefaults;
++
++	/*
++	 * Scale the sharpening parameters of the default configuration. The
++	 * unsharp mask amount is u4.5, the direct sharpening weight is u1.6
++	 * limited to 1.0, and the overshoot limits are u13.0.
++	 */
++	const struct ipu3_uapi_yuvp1_iefd_shrp_cfg &def = kIefdDefaults.sharp;
++	struct ipu3_uapi_yuvp1_iefd_shrp_cfg &sharp = iefd.sharp;
++
++	const UQ<4, 5> unsharpAmount{ static_cast<uint16_t>(def.unshrp_cfg.unsharp_amount) };
++	const UQ<1, 6> dirSharp{ static_cast<uint8_t>(def.far_w.dir_shrp) };
++
++	sharp.unshrp_cfg.unsharp_amount = UQ<4, 5>(sharpness * unsharpAmount.value()).quantized();
++	sharp.far_w.dir_shrp = UQ<1, 6>(std::min(sharpness * dirSharp.value(), 1.0f)).quantized();
++	sharp.cfg.nega_lmt_txt = UQ<13, 0>(sharpness * def.cfg.nega_lmt_txt).quantized();
++	sharp.cfg.posi_lmt_txt = UQ<13, 0>(sharpness * def.cfg.posi_lmt_txt).quantized();
++	sharp.cfg.nega_lmt_dir = UQ<13, 0>(sharpness * def.cfg.nega_lmt_dir).quantized();
++	sharp.cfg.posi_lmt_dir = UQ<13, 0>(sharpness * def.cfg.posi_lmt_dir).quantized();
++
++	params->use.acc_iefd = 1;
++}
++
++/**
++ * \copydoc libcamera::ipa::Algorithm::process
++ */
++void Sharpness::process([[maybe_unused]] IPAContext &context,
++			[[maybe_unused]] const uint32_t frame,
++			IPAFrameContext &frameContext,
++			[[maybe_unused]] const ipu3_uapi_stats_3a *stats,
++			ControlList &metadata)
++{
++	metadata.set(controls::Sharpness, frameContext.sharpness.value);
++}
++
++REGISTER_IPA_ALGORITHM(Sharpness, "Sharpness")
++
++} /* namespace ipa::ipu3::algorithms */
++
++} /* namespace libcamera */
+diff --git a/src/ipa/ipu3/algorithms/sharpness.h b/src/ipa/ipu3/algorithms/sharpness.h
+new file mode 100644
+index 0000000..79ae822
+--- /dev/null
++++ b/src/ipa/ipu3/algorithms/sharpness.h
+@@ -0,0 +1,43 @@
++/* SPDX-License-Identifier: LGPL-2.1-or-later */
++/*
++ * Copyright (C) 2026, D. Manresa
++ *
++ * IPU3 Sharpness control
++ */
++
++#pragma once
++
++#include <linux/intel-ipu3.h>
++
++#include "algorithm.h"
++
++namespace libcamera {
++
++namespace ipa::ipu3::algorithms {
++
++class Sharpness : public Algorithm
++{
++public:
++	Sharpness() = default;
++	~Sharpness() = default;
++
++	int init(IPAContext &context, const ValueNode &tuningData) override;
++	int configure(IPAContext &context, const IPAConfigInfo &configInfo) override;
++	void queueRequest(IPAContext &context, const uint32_t frame,
++			  IPAFrameContext &frameContext,
++			  const ControlList &controls) override;
++	void prepare(IPAContext &context, const uint32_t frame,
++		     IPAFrameContext &frameContext,
++		     ipu3_uapi_params *params) override;
++	void process(IPAContext &context, const uint32_t frame,
++		     IPAFrameContext &frameContext,
++		     const ipu3_uapi_stats_3a *stats,
++		     ControlList &metadata) override;
++
++private:
++	float defaultSharpness_ = 1.0f;
++};
++
++} /* namespace ipa::ipu3::algorithms */
++
++} /* namespace libcamera */
+diff --git a/src/ipa/ipu3/data/uncalibrated.yaml b/src/ipa/ipu3/data/uncalibrated.yaml
+index b7ab0d7..930d4ed 100644
+--- a/src/ipa/ipu3/data/uncalibrated.yaml
++++ b/src/ipa/ipu3/data/uncalibrated.yaml
+@@ -10,4 +10,5 @@ algorithms:
+   - Ccm:
+   - ToneMapping:
+   - Saturation:
++  - Sharpness:
+ ...
+diff --git a/src/ipa/ipu3/ipa_context.h b/src/ipa/ipu3/ipa_context.h
+index 3d01a02..dfc5596 100644
+--- a/src/ipa/ipu3/ipa_context.h
++++ b/src/ipa/ipu3/ipa_context.h
+@@ -59,6 +59,10 @@ struct IPAActiveState {
+ 	struct {
+ 		float value;
+ 	} saturation;
++
++	struct {
++		float value;
++	} sharpness;
+ };
+ 
+ struct IPAFrameContext : public FrameContext {
+@@ -77,6 +81,11 @@ struct IPAFrameContext : public FrameContext {
+ 		float value;
+ 		bool update;
+ 	} saturation;
++
++	struct {
++		float value;
++		bool update;
++	} sharpness;
+ };
+ 
+ struct IPAContext {
+-- 
+2.55.0
+

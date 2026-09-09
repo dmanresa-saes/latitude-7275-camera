@@ -1,0 +1,52 @@
+From 14cc694a68375692de23ba9e3e1c60245d3d05d9 Mon Sep 17 00:00:00 2001
+From: "D. Manresa" <dmanresa@gmail.com>
+Date: Wed, 9 Sep 2026 10:13:40 +0200
+Subject: [PATCH v2 0/2] ipa: ipu3: Add Saturation and Sharpness algorithms
+
+These two algorithms expose the two ImgU blocks that currently run with
+the driver defaults and cannot be changed from libcamera: the Total Color
+Correction chroma gain (as controls::Saturation) and the IEFD sharpening
+(as controls::Sharpness). Both program the block with the ImgU driver
+defaults and scale them, so enabling them with the default value of 1.0
+does not change the output; 0.0 gives greyscale / no sharpening.
+
+The series is based on Dan's "[PATCH v3 00/10] libipa: Re-work IPU3 IPA
+to use libipa algorithms" (patchwork series 6162), which introduces the
+IPAContext::ctrlMap the algorithms use to register their controls.
+
+Tested on a Dell Latitude 7275 (IPU3, OV5670); the v2 code gives the same
+results as v1 (chroma doubles from 1.0 to 2.0, sharpness metric 2.86 ->
+4.10 from 1.0 to 9.0 on today's scene).
+
+Changes in v2 (thanks Barnabás):
+- Use float throughout instead of double.
+- Drop 'static' on the tables in the anonymous namespace.
+- Quantize with UQ<> from libipa/fixedpoint.h instead of lround/clamp
+  (u12.0 gain, u4.5 unsharp amount, u1.6 direct sharpening weight,
+  u13.0 overshoot limits).
+- Copy the TCC r_sqr table by struct assignment as the kernel does, and
+  note that the TCC configuration up to the gain table replicates the
+  kernel's imgu_css_cfg_acc().
+- Write the IEFD defaults with designated initializers as in
+  ipu3-tables.c.
+
+D. Manresa (2):
+  ipa: ipu3: Add a Saturation algorithm
+  ipa: ipu3: Add a Sharpness algorithm
+
+ src/ipa/ipu3/algorithms/meson.build    |   2 +
+ src/ipa/ipu3/algorithms/saturation.cpp | 202 ++++++++++++++++++++++++
+ src/ipa/ipu3/algorithms/saturation.h   |  43 ++++++
+ src/ipa/ipu3/algorithms/sharpness.cpp  | 205 +++++++++++++++++++++++++
+ src/ipa/ipu3/algorithms/sharpness.h    |  43 ++++++
+ src/ipa/ipu3/data/uncalibrated.yaml    |   2 +
+ src/ipa/ipu3/ipa_context.h             |  18 +++
+ 7 files changed, 515 insertions(+)
+ create mode 100644 src/ipa/ipu3/algorithms/saturation.cpp
+ create mode 100644 src/ipa/ipu3/algorithms/saturation.h
+ create mode 100644 src/ipa/ipu3/algorithms/sharpness.cpp
+ create mode 100644 src/ipa/ipu3/algorithms/sharpness.h
+
+-- 
+2.55.0
+
