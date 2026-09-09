@@ -1,0 +1,48 @@
+From 1e2c5c65b0a77bd56efd94a0dd563c7468564643 Mon Sep 17 00:00:00 2001
+From: "D. Manresa" <dmanresa@gmail.com>
+Date: Wed, 9 Sep 2026 09:01:34 +0200
+Subject: [PATCH 0/2] ipa: ipu3: Add Saturation and Sharpness algorithms
+
+These two algorithms expose the two ImgU blocks that currently run with
+the driver defaults and cannot be changed from libcamera: the Total Color
+Correction chroma gain (as controls::Saturation) and the IEFD sharpening
+(as controls::Sharpness). Both program the block with the ImgU driver
+defaults and scale them, so enabling them with the default value of 1.0
+does not change the output; 0.0 gives greyscale / no sharpening.
+
+The series is based on Dan's "[PATCH v3 00/10] libipa: Re-work IPU3 IPA
+to use libipa algorithms" (patchwork series 6162), which introduces the
+IPAContext::ctrlMap the algorithms use to register their controls. It was
+built with werror=false because v3 still uses libcamera::Span on top of
+current master.
+
+A note on the Y_EE_NR block: dumping the binary headers of the ImgU
+firmware (irci_irci_ecr-master_20161208_0213_20170112_1500, and the 2015
+css_fw.bin shipped with Dell's Windows driver) shows that no binary
+enables the yuvp1_b0 accelerator, while all of them enable yuvp1_c0 (IEFD)
+and yuvp2 (TCC). This is why programming Y_EE_NR has no visible effect and
+why the sharpening is done through IEFD here.
+
+Tested on a Dell Latitude 7275 (IPU3, OV5670), numbers in the commit
+messages.
+
+D. Manresa (2):
+  ipa: ipu3: Add a Saturation algorithm
+  ipa: ipu3: Add a Sharpness algorithm
+
+ src/ipa/ipu3/algorithms/meson.build    |   2 +
+ src/ipa/ipu3/algorithms/saturation.cpp | 199 +++++++++++++++++++++++
+ src/ipa/ipu3/algorithms/saturation.h   |  43 +++++
+ src/ipa/ipu3/algorithms/sharpness.cpp  | 208 +++++++++++++++++++++++++
+ src/ipa/ipu3/algorithms/sharpness.h    |  43 +++++
+ src/ipa/ipu3/data/uncalibrated.yaml    |   2 +
+ src/ipa/ipu3/ipa_context.h             |  18 +++
+ 7 files changed, 515 insertions(+)
+ create mode 100644 src/ipa/ipu3/algorithms/saturation.cpp
+ create mode 100644 src/ipa/ipu3/algorithms/saturation.h
+ create mode 100644 src/ipa/ipu3/algorithms/sharpness.cpp
+ create mode 100644 src/ipa/ipu3/algorithms/sharpness.h
+
+-- 
+2.55.0
+

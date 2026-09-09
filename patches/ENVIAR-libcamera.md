@@ -95,3 +95,24 @@ de Dan a master, la gamma se ajusta con `gamma:` en el tuning, sin parche.
 Nota: en master (con y sin la serie) el AGC del IPU3 escupe "Effective
 exposure value is 0. This is a bug in AGC" en los primeros fotogramas; la
 imagen sale bien. No es nuestro; vigilar si alguien lo reporta.
+
+## SEGUNDA TANDA ENVIADA el 2026-09-09 (09:01 CEST), ficheros en `libcamera-upstream/round2/`
+[PATCH 0/2] ipa: ipu3: Add Saturation and Sharpness algorithms,
+Message-ID <20260909070146.18825-1-dmanresa@gmail.com>, cc Dan Scally.
+- 1/2 Saturation: bloque TCC con los valores del driver y la tabla de ganancia
+  de croma escalada por controls::Saturation (0..2, tuning `saturation:`,
+  1.0 = driver). Medido: croma 0,00 / 7,97 / 15,83 con 0 / 1 / 2.
+- 2/2 Sharpness: bloque IEFD con los valores del driver y unsharp amount,
+  dir_shrp y limites escalados por controls::Sharpness (0..9, tuning
+  `sharpness:`). Medido: sigma laplaciano 2,24 / 2,47 / 2,81 / 3,43 con
+  0 / 1 / 4 / 9. Y_EE_NR descartado (ningun binario del firmware lo activa).
+Basada en la serie v3 de Dan (6162): usa `context.ctrlMap`. Rama local
+`ipu3-round2` en el worktree ~/camara/libcamera-dan (build en `build/`,
+werror=false). Si Dan saca v4, rebasar y reenviar como v2.
+Herramientas: `metrica.py` (Y media, croma media, nitidez) y `blackpoint.py`,
+copiadas a `tools/` del repo. Comparativa: ~/camara-ipu3/sat-sharp-comparativa.png.
+Estado kernel el 09-09: Hans de Goede dio Reviewed-by al parche DMI de
+intel-lpss; Andy Shevchenko pide que Thierry lo lleve como parche 2 de su
+v11 (contestado, Message-ID <20260909065104.15817-1-dmanresa@gmail.com>);
+falta el Ack de Lee Jones. El robot media-ci no pudo aplicarlo solo (depende
+de la serie del 5285): normal.
