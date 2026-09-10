@@ -130,3 +130,19 @@ Message-ID <20260909081355.28471-1-dmanresa@gmail.com>, cc Dan y Barnabas.
 Truco: al construir UQ<> desde un bitfield del uapi hay que hacer
 static_cast<uint16_t>/uint8_t o el constructor es ambiguo.
 Dan (09-09 08:53): agradece el Tested-by de gamma y arreglara Span en su v4.
+
+## Black level v3 ENVIADA el 2026-09-10 (19:21 CEST), ficheros en `libcamera-upstream/v3/`
+Dan Scally reviso la v2 el 10-09 a las 17:25: (1) `uint16_t` en vez de
+`int16_t` para la constante y el miembro; (2) dejar solo el `\copydoc` como
+bloque de documentacion y mover la explicacion del `>> 5` a un comentario
+junto al propio desplazamiento. Ademas CONFIRMO el hallazgo en una Surface
+Go 2 con OV5693: hay que pasarle al ISP el doble del pedestal configurado en
+el sensor. Aplicado todo y reprobado (nivel 128, punto negro p1=8).
+Message-ID de la v3 <20260910172120.73148-1-dmanresa@gmail.com>.
+Ademas se le contesto a su duda de por que la unidad es media LSB
+(Message-ID <20260910172222.73322-1-dmanresa@gmail.com>): encaja con que el
+OB grid se aplique despues de que el formateador de entrada ensanche el dato
+de 10 a 11 bits; el resto del pipeline va mas ancho (los umbrales de
+saturacion del AWB estan documentados sobre [0, 8191]). No hay nada en el
+uAPI que fije la unidad, asi que queda como observacion empirica en dos
+sensores.

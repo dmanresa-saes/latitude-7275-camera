@@ -1,0 +1,39 @@
+From 580114c2f8dacd241ca363bc925c5e48658829ac Mon Sep 17 00:00:00 2001
+From: "D. Manresa" <dmanresa@gmail.com>
+Date: Thu, 10 Sep 2026 19:21:10 +0200
+Subject: [PATCH v3 0/2] ipa: ipu3: Take the OV5670 black level from the sensor helper
+
+The black level of the OV5670 belongs in the camera sensor helper rather
+than in the tuning data, so:
+
+- add the OV5670 black level (64 at 10 bits) to camera_sensor_helper.cpp;
+- make the IPU3 BLC algorithm read it from the helper, converting the
+  16-bit value to the ImgU OB grid units (half a 10-bit LSB), and keep
+  the old hard-coded 64 with a warning for sensors without a helper
+  value.
+
+Measured on a Latitude 7275: with 64 the darkest percentile of Y is 32
+with a U/V of 132/131 (a residual, colour-shifted pedestal); with 128 it
+is 15 with U/V 128/128.
+
+Changes in v3 (thanks Dan):
+- Use uint16_t for the default black level and for the member.
+- Move the explanation of the >> 5 conversion from the copydoc block into
+  a comment next to the shift itself, and mention the OV5693 experiment
+  that corroborates it.
+
+Changes in v2:
+- Rework as helper + algorithm change instead of a tuning parameter.
+
+D. Manresa (2):
+  ipa: libipa: camera_sensor_helper: Add OV5670 black level
+  ipa: ipu3: blc: Use the black level from the camera sensor helper
+
+ src/ipa/ipu3/algorithms/blc.cpp         | 60 +++++++++++++++++++++----
+ src/ipa/ipu3/algorithms/blc.h           |  5 +++
+ src/ipa/libipa/camera_sensor_helper.cpp |  2 +
+ 3 files changed, 58 insertions(+), 9 deletions(-)
+
+-- 
+2.55.0
+
