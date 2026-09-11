@@ -1,0 +1,43 @@
+From f7a036b0831c39827c1f448d124b1fe868d9fb65 Mon Sep 17 00:00:00 2001
+From: "D. Manresa" <dmanresa@gmail.com>
+Date: Fri, 11 Sep 2026 17:39:09 +0200
+Subject: [PATCH v4 0/2] ipa: ipu3: Take the OV5670 black level from the sensor helper
+
+The black level of the OV5670 belongs in the camera sensor helper rather
+than in the tuning data, so add it there and make the IPU3 BLC algorithm
+read it from the helper, converting the 16-bit value to the units the
+ImgU OB grid expects.
+
+Changes in v4:
+- 1/2: Laurent is right that deriving the data pedestal from the ISP
+  output was not a way to measure it, since that is the very thing the
+  patch then configures. Replaced by the black level characterisation
+  that comes in the OEM tuning data for this camera module, which the
+  vendor measured over six exposure times and five gains for the four
+  Bayer channels: 64.1 to 64.4 at unity gain, within 62.0 to 64.5 up to
+  a gain of 15.9. The commit message now cites that instead.
+- 2/2: shortened the commit message to the first paragraph (Laurent,
+  Dan), and rewrote the comment on the conversion along the lines Dan
+  suggested, with the two worked examples and s/The helper/
+  CameraSensorHelper/. Dropped the surrounding prose that Laurent found
+  irrelevant.
+
+Changes in v3:
+- uint16_t for the default black level and the member; the explanation of
+  the conversion moved out of the copydoc block.
+
+Changes in v2:
+- Reworked as helper plus algorithm change instead of a tuning parameter.
+
+D. Manresa (2):
+  ipa: libipa: camera_sensor_helper: Add OV5670 black level
+  ipa: ipu3: blc: Use the black level from the camera sensor helper
+
+ src/ipa/ipu3/algorithms/blc.cpp         | 53 ++++++++++++++++++++-----
+ src/ipa/ipu3/algorithms/blc.h           |  5 +++
+ src/ipa/libipa/camera_sensor_helper.cpp |  2 +
+ 3 files changed, 51 insertions(+), 9 deletions(-)
+
+-- 
+2.55.0
+

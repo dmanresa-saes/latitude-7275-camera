@@ -146,3 +146,27 @@ de 10 a 11 bits; el resto del pipeline va mas ancho (los umbrales de
 saturacion del AWB estan documentados sobre [0, 8191]). No hay nada en el
 uAPI que fije la unidad, asi que queda como observacion empirica en dos
 sensores.
+
+## Black level v4 ENVIADA el 2026-09-11 (17:39 CEST), ficheros en `libcamera-upstream/v4/`
+Revisiones de la v3:
+- Laurent Pinchart (10-09 20:05 y 20:09). Sobre el 1/2: "That's not the right
+  way to measure the data pedestal" — TENIA RAZON y era objecion de fondo, no
+  de estilo: yo deducia el pedestal de la salida del ISP, que es justo lo que
+  el 2/2 configura con ese valor, o sea circular. Sobre el 2/2: mensaje de
+  commit y comentario "too long, with lots of irrelevant information".
+- Dan Scally (11-09 13:26, DESPUES de Laurent, y coincide con el): cortar el
+  mensaje de commit tras el primer parrafo, s/The helper/CameraSensorHelper/
+  y redaccion concreta del comentario con dos ejemplos (pedestal 16 -> 32,
+  64 -> 128).
+Solucion del 1/2: la fuente correcta estaba en casa. El CPF OEM de este modulo
+(`~/camara-ipu3/tuning-oem/ov5670_4BF523T2_oem.json`, clave
+`nivel_negro_10bit`) trae la CARACTERIZACION del fabricante: 30 entradas,
+6 exposiciones x 5 ganancias, los 4 canales Bayer. A ganancia 1: 64,1..64,4.
+Hasta ganancia 15,9: 62,0..64,5. Eso si es una medida del pedestal, y es lo
+que cita ahora el mensaje de commit. (La nota del doc que decia "63 a 10 bits"
+era un redondeo malo: los valores reales rondan 64,2.)
+Message-ID v4 <20260911153918.96470-1-dmanresa@gmail.com>; respuesta directa a
+Laurent en <20260911153951.96564-1-dmanresa@gmail.com>, reconociendo el fallo
+y ofreciendo el dato del datasheet a quien lo tenga (yo no).
+LECCION: no justificar un valor de sensor con medidas tomadas a traves del
+bloque del ISP que ese mismo valor configura.

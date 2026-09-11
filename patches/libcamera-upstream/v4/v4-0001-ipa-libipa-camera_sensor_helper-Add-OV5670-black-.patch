@@ -1,0 +1,35 @@
+From 1c1340099f82762d30d4f13fc859e218626645c1 Mon Sep 17 00:00:00 2001
+From: "D. Manresa" <dmanresa@gmail.com>
+Date: Tue, 8 Sep 2026 18:19:57 +0200
+Subject: [PATCH v4 1/2] ipa: libipa: camera_sensor_helper: Add OV5670 black
+ level
+
+The OV5670 outputs a data pedestal of 64 at 10 bits. The black level
+characterisation in the OEM tuning data for a Dell Latitude 7275 camera
+module measures 64.1 to 64.4 at unity gain over six exposure times, and
+stays within 62.0 to 64.5 up to a gain of 15.9.
+
+Provide it in the camera sensor helper so that IPAs can use it instead of
+hard-coded or tuning-file values.
+
+Signed-off-by: D. Manresa <dmanresa@gmail.com>
+---
+ src/ipa/libipa/camera_sensor_helper.cpp | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/src/ipa/libipa/camera_sensor_helper.cpp b/src/ipa/libipa/camera_sensor_helper.cpp
+index 82bf255..eeb3277 100644
+--- a/src/ipa/libipa/camera_sensor_helper.cpp
++++ b/src/ipa/libipa/camera_sensor_helper.cpp
+@@ -802,6 +802,8 @@ class CameraSensorHelperOv5670 : public CameraSensorHelper
+ public:
+ 	CameraSensorHelperOv5670()
+ 	{
++		/* Default BLC target of 64 at 10bits, confirmed by measurement. */
++		blackLevel_ = 4096;
+ 		gain_ = AnalogueGainLinear{ 1, 0, 0, 128 };
+ 	}
+ };
+-- 
+2.55.0
+
