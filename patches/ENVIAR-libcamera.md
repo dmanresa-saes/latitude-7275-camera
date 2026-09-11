@@ -170,3 +170,16 @@ Laurent en <20260911153951.96564-1-dmanresa@gmail.com>, reconociendo el fallo
 y ofreciendo el dato del datasheet a quien lo tenga (yo no).
 LECCION: no justificar un valor de sensor con medidas tomadas a traves del
 bloque del ISP que ese mismo valor configura.
+
+## 2026-09-11 17:47 — Laurent: "AI slop". PARADO, pendiente de decision del usuario
+Respuesta de Laurent a mi correo de reconocimiento (archivo libcamera-devel
+061992): "I have a very hard time not reading this as AI slop". No es objecion
+tecnica. Disparador: la frase "You are right, and it is worse than merely
+imprecise: ... so it could not confirm anything" — registro de LLM.
+NO se ha contestado. Cualquier respuesta (negar, admitir, explicar) es una
+afirmacion publica sobre el usuario, no una aclaracion tecnica.
+Dato para decidir: en el kernel SI se declara (Assisted-by, y el usuario se lo
+dijo a Sakari por su nombre). En libcamera nuestros parches no llevan etiqueta
+y libcamera NO tiene convencion: nada en contributing.rst ni coding-style.rst,
+cero Assisted-by en el historial del arbol. La asimetria es nuestra.
+La v4 (17:39) sigue sin review; no depende de esto.
