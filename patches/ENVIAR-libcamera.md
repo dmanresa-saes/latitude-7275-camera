@@ -183,3 +183,20 @@ dijo a Sakari por su nombre). En libcamera nuestros parches no llevan etiqueta
 y libcamera NO tiene convencion: nada en contributing.rst ni coding-style.rst,
 cero Assisted-by en el historial del arbol. La asimetria es nuestra.
 La v4 (17:39) sigue sin review; no depende de esto.
+
+## 2026-09-11 18:52 — el usuario contesta EL MISMO a Laurent (archivo 061993)
+"I direct this work and test it on my own hardware. I use an AI assistant to
+write it up, and I should have said so on this list, as I do in my kernel
+patches." Comprobado en el archivo publico.
+REGLA A PARTIR DE AHORA: todo parche de libcamera declara la asistencia, igual
+que los del kernel. NO se reenvian la v4 ni la v2 de Saturation/Sharpness solo
+por la etiqueta (seria ruido): se aplica en la siguiente version de cada una.
+Formatos en uso con esta misma firma: kernel `Assisted-by: Claude Code:...`;
+libcamera (la otra sesion, RFC awb gainMin 061741 de agosto) una frase en el
+mensaje: "Developed with the assistance of an AI tool (Claude) and verified
+on ..."; libcamera (esta sesion) nada hasta hoy. El doc del kernel
+(coding-assistants.rst) fija `Assisted-by: LLM [TOOL1] [TOOL2]`, donde las
+herramientas son de analisis, no el modelo; pero Sakari pregunto "which one?"
+ante un LLM pelado. Falta que el usuario fije la redaccion exacta.
+Y nombrar el modelo real: hasta la manana del 11-09 fue Fable 5.1, desde la
+tarde Opus 5.
